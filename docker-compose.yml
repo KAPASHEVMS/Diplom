@@ -1,0 +1,57 @@
+services:
+  db:
+    image: postgres:15-alpine
+    container_name: pricing_db
+    environment:
+      POSTGRES_USER: ${POSTGRES_USER:-pricing}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-pricing_pwd}
+      POSTGRES_DB: ${POSTGRES_DB:-pricing}
+    volumes:
+      - pgdata:/var/lib/postgresql/data
+    ports:
+      - "5432:5432"
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER:-pricing} -d ${POSTGRES_DB:-pricing}"]
+      interval: 5s
+      timeout: 3s
+      retries: 10
+
+  migrate:
+    build: .
+    container_name: pricing_migrate
+    environment:
+      DATABASE_URL: postgresql+psycopg2://${POSTGRES_USER:-pricing}:${POSTGRES_PASSWORD:-pricing_pwd}@db:5432/${POSTGRES_DB:-pricing}
+    depends_on:
+      db:
+        condition: service_healthy
+    command: ["alembic", "upgrade", "head"]
+    restart: "no"
+
+  seed:
+    build: .
+    container_name: pricing_seed
+    environment:
+      DATABASE_URL: postgresql+psycopg2://${POSTGRES_USER:-pricing}:${POSTGRES_PASSWORD:-pricing_pwd}@db:5432/${POSTGRES_DB:-pricing}
+      DEFAULT_USER: ${DEFAULT_USER:-manager}
+      DEFAULT_PASSWORD: ${DEFAULT_PASSWORD:-manager123}
+    depends_on:
+      migrate:
+        condition: service_completed_successfully
+    command: ["python", "-m", "app.seed"]
+    restart: "no"
+
+  worker:
+    build: .
+    container_name: pricing_worker
+    environment:
+      DATABASE_URL: postgresql+psycopg2://${POSTGRES_USER:-pricing}:${POSTGRES_PASSWORD:-pricing_pwd}@db:5432/${POSTGRES_DB:-pricing}
+      PARSER_MODE: ${PARSER_MODE:-demo}
+      PARSER_INTERVAL_SEC: ${PARSER_INTERVAL_SEC:-600}
+    depends_on:
+      seed:
+        condition: service_completed_successfully
+    command: ["python", "-m", "app.parsers.runner"]
+    restart: unless-stopped
+
+volumes:
+  pgdata:
