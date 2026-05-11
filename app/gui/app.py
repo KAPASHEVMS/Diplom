@@ -36,6 +36,20 @@ class MainApp(tk.Tk):
         style.configure("Treeview.Heading", font=("Arial", 10, "bold"))
 
         self._show_login()
+        # Принудительно поднимаем окно на передний план
+        self.after(50, self._raise_window)
+
+    def _raise_window(self):
+        try:
+            self.update_idletasks()
+            self.deiconify()
+            self.lift()
+            self.attributes("-topmost", True)
+            self.after(200, lambda: self.attributes("-topmost", False))
+            self.focus_force()
+            print("[ПИС] окно показано", flush=True)
+        except Exception:
+            pass
 
     # ---------- Login screen ----------
     def _show_login(self):
